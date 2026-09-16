@@ -36,4 +36,7 @@ dependencies {
     implementation project(':FtcRobotController')
     implementation "org.solverslib:core:0.3.5" // core
     implementation 'com.bylazar:fullpanels:1.0.12' // Panels dashboard
+    
+    // JUnit 4 for unit testing
+    testImplementation 'junit:junit:4.13.2'
 }

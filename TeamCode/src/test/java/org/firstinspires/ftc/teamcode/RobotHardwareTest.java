@@ -1,13 +1,16 @@
 package org.firstinspires.ftc.teamcode;
 
+import com.pedropathing.math.Pose;
 import org.junit.Test;
 import org.junit.Before;
 import static org.junit.Assert.*;
 
 /**
- * Unit tests for RobotHardware voltage compensation
+ * Unit tests for RobotHardware voltage compensation and flywheel logic
  */
 public class RobotHardwareTest {
+    
+    // ===== VOLTAGE COMPENSATION TESTS =====
     
     @Test
     public void testVoltageToPower_Normal() {
@@ -89,10 +92,112 @@ public class RobotHardwareTest {
         assertTrue("Should handle negative values", result <= 0);
     }
     
+    // ===== FLYWHEEL READY TESTS =====
+    
+    @Test
+    public void testIsFlywheelReady_AtTarget() {
+        // Flywheel at exact target velocity
+        double currentVel = RobotHardware.FLYWHEEL_VELOCITY;
+        boolean ready = isFlywheelReady(currentVel, RobotHardware.FLYWHEEL_VELOCITY);
+        assertTrue("Flywheel at target should be ready", ready);
+    }
+    
+    @Test
+    public void testIsFlywheelReady_WithinTolerance() {
+        // Flywheel within tolerance (just under)
+        double currentVel = RobotHardware.FLYWHEEL_VELOCITY - RobotHardware.FLYWHEEL_VELOCITY_TOLERANCE + 1;
+        boolean ready = isFlywheelReady(currentVel, RobotHardware.FLYWHEEL_VELOCITY);
+        assertTrue("Flywheel within tolerance should be ready", ready);
+    }
+    
+    @Test
+    public void testIsFlywheelReady_JustAboveTolerance() {
+        // Flywheel just above tolerance
+        double currentVel = RobotHardware.FLYWHEEL_VELOCITY + RobotHardware.FLYWHEEL_VELOCITY_TOLERANCE + 1;
+        boolean ready = isFlywheelReady(currentVel, RobotHardware.FLYWHEEL_VELOCITY);
+        assertFalse("Flywheel above tolerance should not be ready", ready);
+    }
+    
+    @Test
+    public void testIsFlywheelReady_JustBelowTolerance() {
+        // Flywheel just below tolerance
+        double currentVel = RobotHardware.FLYWHEEL_VELOCITY - RobotHardware.FLYWHEEL_VELOCITY_TOLERANCE - 1;
+        boolean ready = isFlywheelReady(currentVel, RobotHardware.FLYWHEEL_VELOCITY);
+        assertFalse("Flywheel below tolerance should not be ready", ready);
+    }
+    
+    @Test
+    public void testIsFlywheelReady_Zero() {
+        // Flywheel not spinning
+        double currentVel = 0.0;
+        boolean ready = isFlywheelReady(currentVel, RobotHardware.FLYWHEEL_VELOCITY);
+        assertFalse("Stopped flywheel should not be ready", ready);
+    }
+    
+    @Test
+    public void testIsFlywheelReady_ExactTolerance() {
+        // Flywheel at exact tolerance boundary (exclusive, so just inside)
+        double currentVel = RobotHardware.FLYWHEEL_VELOCITY + RobotHardware.FLYWHEEL_VELOCITY_TOLERANCE - 0.1;
+        boolean ready = isFlywheelReady(currentVel, RobotHardware.FLYWHEEL_VELOCITY);
+        assertTrue("Flywheel just inside tolerance boundary should be ready", ready);
+    }
+    
+    // ===== HIVE POSITION TESTS =====
+    
+    @Test
+    public void testHivePositions_NotNull() {
+        // Verify all hive positions are defined
+        assertNotNull("RED_START should be defined", RobotHardware.RED_START);
+        assertNotNull("BLUE_START should be defined", RobotHardware.BLUE_START);
+        assertNotNull("RED_HIVE_LEFT should be defined", RobotHardware.RED_HIVE_LEFT);
+        assertNotNull("RED_HIVE_RIGHT should be defined", RobotHardware.RED_HIVE_RIGHT);
+        assertNotNull("BLUE_HIVE_LEFT should be defined", RobotHardware.BLUE_HIVE_LEFT);
+        assertNotNull("BLUE_HIVE_RIGHT should be defined", RobotHardware.BLUE_HIVE_RIGHT);
+    }
+    
+    @Test
+    public void testHivePositions_RedHiveRightCoordinates() {
+        // Verify RED_HIVE_RIGHT has expected coordinates
+        Pose redHiveRight = RobotHardware.RED_HIVE_RIGHT;
+        assertEquals(57.6, redHiveRight.x(), 0.01);
+        assertEquals(54.2, redHiveRight.y(), 0.01);
+        assertEquals(0.0, redHiveRight.heading(), 0.01);
+    }
+    
+    @Test
+    public void testFlywheelConstants_Positive() {
+        // Verify flywheel constants are positive
+        assertTrue("FLYWHEEL_VELOCITY should be positive", RobotHardware.FLYWHEEL_VELOCITY > 0);
+        assertTrue("FLYWHEEL_VELOCITY_TOLERANCE should be positive", RobotHardware.FLYWHEEL_VELOCITY_TOLERANCE > 0);
+        assertTrue("FLYWHEEL_KP should be positive", RobotHardware.FLYWHEEL_KP > 0);
+    }
+    
+    @Test
+    public void testAlignmentTolerance_Reasonable() {
+        // Verify alignment tolerance is reasonable (between 0.5 and 10 degrees)
+        assertTrue("ALIGNMENT_TOLERANCE should be > 0.5", RobotHardware.ALIGNMENT_TOLERANCE > 0.5);
+        assertTrue("ALIGNMENT_TOLERANCE should be < 10", RobotHardware.ALIGNMENT_TOLERANCE < 10.0);
+    }
+    
+    @Test
+    public void testIntakePowers_NonZero() {
+        // Verify intake powers are configured
+        assertTrue("INTAKE_ON_POWER should be non-zero", Math.abs(RobotHardware.INTAKE_ON_POWER) > 0);
+        assertTrue("TRANSFER_ON_POWER should be non-zero", Math.abs(RobotHardware.TRANSFER_ON_POWER) > 0);
+        assertTrue("TRANSFER_FIRE_POWER should be non-zero", Math.abs(RobotHardware.TRANSFER_FIRE_POWER) > 0);
+    }
+    
     /**
      * Helper method that replicates the voltage compensation logic
      */
     private double voltageToPower(double targetVolts, double currentVoltage) {
         return Math.min(1.0, targetVolts / Math.max(currentVoltage, 1.0));
+    }
+    
+    /**
+     * Helper method that replicates the flywheel ready check
+     */
+    private boolean isFlywheelReady(double currentVel, double targetVel) {
+        return Math.abs(currentVel - targetVel) < RobotHardware.FLYWHEEL_VELOCITY_TOLERANCE;
     }
 }

@@ -136,7 +136,7 @@ public class RunToPose {
     private boolean lineIntersectsRect(double x1, double y1, double x2, double y2,
                                        double rectMinX, double rectMaxX, 
                                        double rectMinY, double rectMaxY) {
-        // Check if either endpoint is inside the rectangle
+        // Check if either endpoint is inside the rectangle (including boundary)
         if ((x1 >= rectMinX && x1 <= rectMaxX && y1 >= rectMinY && y1 <= rectMaxY) ||
             (x2 >= rectMinX && x2 <= rectMaxX && y2 >= rectMinY && y2 <= rectMaxY)) {
             return true;
