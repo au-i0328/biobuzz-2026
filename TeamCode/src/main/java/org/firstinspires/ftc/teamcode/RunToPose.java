@@ -16,7 +16,7 @@ public class RunToPose {
     private static final double JOYSTICK_DEADZONE = 0.1;
     
     // Hard stop zones - structure obstacles with safety margin
-    private static final double SAFETY_MARGIN = 1.0; // inches buffer around obstacles
+    private static final double SAFETY_MARGIN = 10.0; // inches buffer around obstacles
     
     private static final double RED_STRUCTURE_MIN_X = 45 - SAFETY_MARGIN;
     private static final double RED_STRUCTURE_MAX_X = 50 + SAFETY_MARGIN;

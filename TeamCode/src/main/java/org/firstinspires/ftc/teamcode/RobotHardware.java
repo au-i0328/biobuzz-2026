@@ -62,7 +62,7 @@ public class RobotHardware {
     public DcMotorEx frontLeft, frontRight, backLeft, backRight;
     public DcMotor intakeMotor, transferMotor;
     public MotorEx flywheelL, flywheelR;
-    public CRServo intakeLeft, intakeRight;
+    //public CRServo intakeLeft, intakeRight;
     
     // Pedro Pathing follower (includes drivetrain and localizer)
     public Follower follower;
@@ -108,10 +108,10 @@ public class RobotHardware {
         intakeMotor.setDirection(DcMotorSimple.Direction.FORWARD);
         transferMotor.setDirection(DcMotorSimple.Direction.FORWARD);
 
-        intakeLeft = new CRServo(hardwareMap, "intakeLeft");
-        intakeRight = new CRServo(hardwareMap, "intakeRight");
+        //intakeLeft = new CRServo(hardwareMap, "intakeLeft");
+        //intakeRight = new CRServo(hardwareMap, "intakeRight");
 
-        intakeRight.setInverted(true);
+        //intakeRight.setInverted(true);
 
         // Initialize flywheel motors (Solvers Ex) with velocity control
         flywheelL = new MotorEx(hardwareMap, "flywheelL");
@@ -137,29 +137,29 @@ public class RobotHardware {
     public void intakeOn() {
         intakeMotor.setPower(voltageToPower(INTAKE_ON_POWER));
         transferMotor.setPower(voltageToPower(TRANSFER_ON_POWER));
-        intakeLeft.set(1);
-        intakeRight.set(1);
+        //intakeLeft.set(1);
+        //intakeRight.set(1);
     }
     
     public void intakeIdle() {
         intakeMotor.setPower(0);
         transferMotor.setPower(0);
-        intakeLeft.set(0);
-        intakeRight.set(0);
+        //intakeLeft.set(0);
+       // intakeRight.set(0);
     }
     
     public void intakeReverse() {
         intakeMotor.setPower(voltageToPower(INTAKE_REVERSE_POWER));
         transferMotor.setPower(voltageToPower(TRANSFER_REVERSE_POWER));
-        intakeLeft.set(-1);
-        intakeRight.set(-1);
+       // intakeLeft.set(-1);
+       // intakeRight.set(-1);
     }
     
     public void transferOn() {
         intakeMotor.setPower(voltageToPower(INTAKE_ON_POWER));
         transferMotor.setPower(voltageToPower(TRANSFER_FIRE_POWER));
-        intakeLeft.set(1);
-        intakeRight.set(1);
+       // intakeLeft.set(1);
+       // intakeRight.set(1);
     }
     
     // Flywheel control methods
