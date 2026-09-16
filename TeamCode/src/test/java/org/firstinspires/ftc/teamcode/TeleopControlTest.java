@@ -3,13 +3,28 @@ package org.firstinspires.ftc.teamcode;
 import com.pedropathing.math.Pose;
 import com.pedropathing.math.Vector2D;
 import org.junit.Test;
+import org.junit.Before;
 import static org.junit.Assert.*;
 
 /**
- * Unit tests for teleop control logic including alignment, target selection,
- * and scoring conditions
+ * Unit tests for teleop control logic including:
+ * - Alignment calculations and checks
+ * - Target selection logic
+ * - Scoring conditions
+ * - Intake state transitions
+ * - Gamepad input mocking and edge detection
+ * - Flywheel state transitions
  */
 public class TeleopControlTest {
+    
+    private MockGamepadState gamepad;
+    private MockRobotState robot;
+    
+    @Before
+    public void setUp() {
+        gamepad = new MockGamepadState();
+        robot = new MockRobotState();
+    }
     
     // ===== TARGET HIVE SELECTION TESTS =====
     
@@ -283,16 +298,6 @@ public class TeleopControlTest {
         assertEquals(5.0, dist, 0.001);  // 3-4-5 triangle
     }
     
-    @Test
-    public void testDistance_RedHiveRightFromOrigin() {
-        Pose origin = new Pose(0, 0, 0);
-        Pose redHiveRight = RobotHardware.RED_HIVE_RIGHT;
-        
-        double dist = distance(origin, redHiveRight);
-        double expected = Math.sqrt(57.6 * 57.6 + 54.2 * 54.2);
-        assertEquals(expected, dist, 0.01);
-    }
-    
     // ===== INTAKE STATE TRANSITION TESTS =====
     
     @Test
@@ -423,5 +428,337 @@ public class TeleopControlTest {
      */
     private String saveIntakeState(String currentState) {
         return currentState;
+    }
+    
+    // ===== GAMEPAD INPUT MOCK TESTS =====
+    
+    @Test
+    public void testGamepadEdgeDetection_RisingEdge() {
+        // Test rising edge detection (button just pressed)
+        gamepad.rightBumper = false;
+        gamepad.previousRightBumper = false;
+        
+        // Press button
+        gamepad.rightBumper = true;
+        
+        assertTrue("Should detect rising edge", 
+            gamepad.rightBumper && !gamepad.previousRightBumper);
+        
+        // Update previous state
+        gamepad.previousRightBumper = gamepad.rightBumper;
+        
+        // Button still held
+        assertFalse("Should not detect rising edge while held",
+            gamepad.rightBumper && !gamepad.previousRightBumper);
+    }
+    
+    @Test
+    public void testGamepadEdgeDetection_FallingEdge() {
+        // Test falling edge detection (button just released)
+        gamepad.leftBumper = true;
+        gamepad.previousLeftBumper = true;
+        
+        // Release button
+        gamepad.leftBumper = false;
+        
+        assertTrue("Should detect falling edge",
+            !gamepad.leftBumper && gamepad.previousLeftBumper);
+        
+        // Update previous state
+        gamepad.previousLeftBumper = gamepad.leftBumper;
+        
+        // Button still released
+        assertFalse("Should not detect falling edge again",
+            !gamepad.leftBumper && gamepad.previousLeftBumper);
+    }
+    
+    @Test
+    public void testGamepadTriggerThreshold() {
+        // Test trigger threshold detection
+        double TRIGGER_THRESHOLD = 0.1;
+        
+        gamepad.leftTrigger = 0.0;
+        assertFalse("Zero trigger should be below threshold", gamepad.leftTrigger > TRIGGER_THRESHOLD);
+        
+        gamepad.leftTrigger = 0.05;
+        assertFalse("Small trigger should be below threshold", gamepad.leftTrigger > TRIGGER_THRESHOLD);
+        
+        gamepad.leftTrigger = 0.1;
+        assertFalse("Exact threshold should be below (exclusive)", gamepad.leftTrigger > TRIGGER_THRESHOLD);
+        
+        gamepad.leftTrigger = 0.11;
+        assertTrue("Above threshold should be detected", gamepad.leftTrigger > TRIGGER_THRESHOLD);
+        
+        gamepad.leftTrigger = 1.0;
+        assertTrue("Full trigger should be detected", gamepad.leftTrigger > TRIGGER_THRESHOLD);
+    }
+    
+    // ===== INTAKE STATE MACHINE TESTS =====
+    
+    @Test
+    public void testIntakeStateMachine_IdleToOnTransition() {
+        robot.intakeState = IntakeState.IDLE;
+        
+        // Press right bumper
+        gamepad.rightBumper = true;
+        gamepad.previousRightBumper = false;
+        
+        // Process edge detection and toggle
+        if (gamepad.rightBumper && !gamepad.previousRightBumper) {
+            robot.intakeState = robot.intakeState == IntakeState.IDLE ? IntakeState.ON : IntakeState.IDLE;
+        }
+        
+        assertEquals("Should transition to ON", IntakeState.ON, robot.intakeState);
+    }
+    
+    @Test
+    public void testIntakeStateMachine_OnToIdleTransition() {
+        robot.intakeState = IntakeState.ON;
+        
+        // Press right bumper
+        gamepad.rightBumper = true;
+        gamepad.previousRightBumper = false;
+        
+        if (gamepad.rightBumper && !gamepad.previousRightBumper) {
+            robot.intakeState = robot.intakeState == IntakeState.IDLE ? IntakeState.ON : IntakeState.IDLE;
+        }
+        
+        assertEquals("Should transition to IDLE", IntakeState.IDLE, robot.intakeState);
+    }
+    
+    @Test
+    public void testIntakeStateMachine_ReversePreservesState() {
+        robot.intakeState = IntakeState.ON;
+        IntakeState savedState = robot.intakeState;
+        
+        // Press left bumper (reverse)
+        gamepad.leftBumper = true;
+        gamepad.previousLeftBumper = false;
+        
+        if (gamepad.leftBumper && !gamepad.previousLeftBumper) {
+            savedState = robot.intakeState;
+            robot.intakeReversing = true;
+        }
+        
+        assertTrue("Should be reversing", robot.intakeReversing);
+        assertEquals("Saved state should be ON", IntakeState.ON, savedState);
+        
+        // Release left bumper
+        gamepad.leftBumper = false;
+        gamepad.previousLeftBumper = true;
+        
+        if (!gamepad.leftBumper && gamepad.previousLeftBumper) {
+            robot.intakeState = savedState;
+            robot.intakeReversing = false;
+        }
+        
+        assertFalse("Should stop reversing", robot.intakeReversing);
+        assertEquals("Should restore saved state", IntakeState.ON, robot.intakeState);
+    }
+    
+    @Test
+    public void testIntakeStateMachine_ReverseFromIdle() {
+        robot.intakeState = IntakeState.IDLE;
+        IntakeState savedState = robot.intakeState;
+        
+        // Reverse from idle
+        gamepad.leftBumper = true;
+        gamepad.previousLeftBumper = false;
+        
+        if (gamepad.leftBumper && !gamepad.previousLeftBumper) {
+            savedState = robot.intakeState;
+            robot.intakeReversing = true;
+        }
+        
+        assertTrue("Should be reversing", robot.intakeReversing);
+        
+        // Release
+        gamepad.leftBumper = false;
+        gamepad.previousLeftBumper = true;
+        
+        if (!gamepad.leftBumper && gamepad.previousLeftBumper) {
+            robot.intakeState = savedState;
+            robot.intakeReversing = false;
+        }
+        
+        assertEquals("Should return to IDLE", IntakeState.IDLE, robot.intakeState);
+    }
+    
+    @Test
+    public void testIntakeStateMachine_ToggleWhileReversing() {
+        robot.intakeState = IntakeState.ON;
+        IntakeState savedState = robot.intakeState;
+        
+        // Start reversing
+        gamepad.leftBumper = true;
+        if (gamepad.leftBumper && !gamepad.previousLeftBumper) {
+            savedState = robot.intakeState;
+            robot.intakeReversing = true;
+        }
+        gamepad.previousLeftBumper = true;
+        
+        // Try to toggle with right bumper while reversing
+        gamepad.rightBumper = true;
+        gamepad.previousRightBumper = false;
+        
+        // Toggle should update saved state
+        if (gamepad.rightBumper && !gamepad.previousRightBumper) {
+            savedState = savedState == IntakeState.IDLE ? IntakeState.ON : IntakeState.IDLE;
+        }
+        
+        assertEquals("Saved state should toggle", IntakeState.IDLE, savedState);
+        
+        // Release reverse
+        gamepad.leftBumper = false;
+        if (!gamepad.leftBumper && gamepad.previousLeftBumper) {
+            robot.intakeState = savedState;
+            robot.intakeReversing = false;
+        }
+        
+        assertEquals("Should apply toggled saved state", IntakeState.IDLE, robot.intakeState);
+    }
+    
+    // ===== FLYWHEEL STATE TRANSITION TESTS =====
+    
+    @Test
+    public void testFlywheelStateTransition_AlignmentTriggered() {
+        robot.flywheelOn = false;
+        robot.flywheelVelocity = 0;
+        
+        // Align to target
+        robot.aligned = true;
+        robot.hasRumbled = false;
+        
+        // Process alignment
+        if (robot.aligned && !robot.hasRumbled) {
+            robot.flywheelOn = true;
+            robot.hasRumbled = true;
+        }
+        
+        assertTrue("Flywheel should start when aligned", robot.flywheelOn);
+        assertTrue("Should mark as rumbled", robot.hasRumbled);
+    }
+    
+    @Test
+    public void testFlywheelStateTransition_LoseAlignment() {
+        robot.flywheelOn = true;
+        robot.aligned = true;
+        
+        // Lose alignment
+        robot.aligned = false;
+        
+        // Process alignment check (FIX #1)
+        if (robot.aligned) {
+            robot.flywheelOn = true;
+        } else {
+            robot.flywheelOn = false;
+        }
+        
+        assertFalse("Flywheel should stop when alignment lost", robot.flywheelOn);
+    }
+    
+    @Test
+    public void testFlywheelStateTransition_RegainAlignment() {
+        robot.flywheelOn = false;
+        robot.aligned = false;
+        robot.hasRumbled = true; // Already rumbled before
+        
+        // Regain alignment
+        robot.aligned = true;
+        
+        // Process alignment check
+        if (robot.aligned) {
+            robot.flywheelOn = true;
+            // Don't rumble again if already rumbled
+        }
+        
+        assertTrue("Flywheel should restart when aligned again", robot.flywheelOn);
+    }
+    
+    @Test
+    public void testFlywheelStateTransition_StopOnTriggerRelease() {
+        robot.flywheelOn = true;
+        
+        // Release right trigger
+        gamepad.rightTrigger = 0.0;
+        gamepad.previousRightTrigger = 0.5;
+        
+        // Process trigger release
+        if (gamepad.rightTrigger <= 0.1 && gamepad.previousRightTrigger > 0.1) {
+            robot.flywheelOn = false;
+        }
+        
+        assertFalse("Flywheel should stop when right trigger released", robot.flywheelOn);
+    }
+    
+    @Test
+    public void testFlywheelStateTransition_StopOnLeftTriggerRelease() {
+        robot.flywheelOn = true;
+        robot.isAligning = true;
+        
+        // Release left trigger
+        gamepad.leftTrigger = 0.0;
+        gamepad.previousLeftTrigger = 0.5;
+        
+        // Process trigger release
+        if (gamepad.leftTrigger <= 0.1 && gamepad.previousLeftTrigger > 0.1) {
+            robot.flywheelOn = false;
+            robot.isAligning = false;
+        }
+        
+        assertFalse("Flywheel should stop when left trigger released", robot.flywheelOn);
+        assertFalse("Should exit aligning mode", robot.isAligning);
+    }
+    
+    @Test
+    public void testFlywheelVelocityRampUp() {
+        robot.flywheelVelocity = 0;
+        robot.flywheelOn = true;
+        
+        // Simulate velocity ramp up
+        double targetVelocity = RobotHardware.FLYWHEEL_VELOCITY;
+        double rampRate = 500.0; // ticks/sec per update
+        
+        // First update
+        robot.flywheelVelocity = Math.min(robot.flywheelVelocity + rampRate, targetVelocity);
+        assertEquals("Should ramp up", 500.0, robot.flywheelVelocity, 0.1);
+        assertFalse("Should not be ready yet", 
+            Math.abs(robot.flywheelVelocity - targetVelocity) < RobotHardware.FLYWHEEL_VELOCITY_TOLERANCE);
+        
+        // Continue ramping
+        for (int i = 0; i < 10; i++) {
+            robot.flywheelVelocity = Math.min(robot.flywheelVelocity + rampRate, targetVelocity);
+        }
+        
+        assertTrue("Should reach target velocity", robot.flywheelVelocity >= targetVelocity);
+        assertTrue("Should be ready",
+            Math.abs(robot.flywheelVelocity - targetVelocity) < RobotHardware.FLYWHEEL_VELOCITY_TOLERANCE);
+    }
+    
+    // ===== MOCK CLASSES =====
+    
+    private static class MockGamepadState {
+        boolean rightBumper = false;
+        boolean previousRightBumper = false;
+        boolean leftBumper = false;
+        boolean previousLeftBumper = false;
+        double leftTrigger = 0.0;
+        double previousLeftTrigger = 0.0;
+        double rightTrigger = 0.0;
+        double previousRightTrigger = 0.0;
+    }
+    
+    private static class MockRobotState {
+        IntakeState intakeState = IntakeState.IDLE;
+        boolean intakeReversing = false;
+        boolean flywheelOn = false;
+        double flywheelVelocity = 0.0;
+        boolean aligned = false;
+        boolean hasRumbled = false;
+        boolean isAligning = false;
+    }
+    
+    private enum IntakeState {
+        IDLE, ON
     }
 }

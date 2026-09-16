@@ -96,6 +96,8 @@ public class Teleop_Red extends OpMode {
             hub.setBulkCachingMode(LynxModule.BulkCachingMode.MANUAL);
         }
 
+        robot.follower.setPose(robot.RED_START);
+
         robot.follower.manual();
         
         PanelsTelemetry.INSTANCE.getTelemetry().debug("Status: Initialized");
@@ -144,14 +146,14 @@ public class Teleop_Red extends OpMode {
         // --- TOUCHPAD: Reset Pose (0, 0, 0) AND IMU ---
         if (currentTouchpad && !lastTouchpad) {
             // Reset the follower pose directly
-            robot.follower.setPose(new Pose(72, 72, 0));
+            robot.follower.setPose(new Pose(72, 72, 90));
         }
 
         // --- SHARE: Reset IMU ONLY (Keep current X and Y position) ---
         if (currentShare && !lastShare) {
             // Preserve existing X and Y, zero out heading
             Pose currentPose = robot.follower.pose();
-            robot.follower.setPose(new Pose(currentPose.x(), currentPose.y(), 0));
+            robot.follower.setPose(new Pose(currentPose.x(), currentPose.y(), 90));
         }
 
         // Update edge detection states
@@ -193,8 +195,8 @@ public class Teleop_Red extends OpMode {
     }
     
     private void handleScoringControl(Pose currentPose) {
-        boolean currentLeftTrigger = gamepad1.left_trigger > 0.2;
-        boolean currentRightTrigger = gamepad1.right_trigger > 0.2;
+        boolean currentLeftTrigger = gamepad1.left_trigger > 0.1;
+        boolean currentRightTrigger = gamepad1.right_trigger > 0.1;
         
         // Left trigger: align to hive using follower.hold() and spin up flywheel (edge detection)
         if (currentLeftTrigger && !previousLeftTrigger) {
@@ -227,16 +229,21 @@ public class Teleop_Red extends OpMode {
                     robot.flywheelOn();
                 }
                 
-                // Keep flywheel spinning while aligned
+                // FIX #1: Keep flywheel spinning ONLY while aligned (stop if alignment lost)
                 if (aligned) {
                     robot.flywheelOn();
+                } else {
+                    // Lost alignment - stop flywheel
+                    robot.flywheelOff();
                 }
             }
         } else if (!currentLeftTrigger && previousLeftTrigger) {
-            // Just released left trigger - stop aligning
+            // Just released left trigger - stop aligning, clear state, and reset heading controller
             isAligning = false;
             targetHive = null;
             hasRumbled = false;
+            robot.flywheelOff();
+            headingController.reset();  // Reset on release to clear accumulated error
         }
         
         previousLeftTrigger = currentLeftTrigger;

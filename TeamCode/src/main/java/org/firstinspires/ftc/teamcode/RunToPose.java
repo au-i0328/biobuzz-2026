@@ -300,6 +300,16 @@ public class RunToPose {
      * @param targetPose The pose to drive to
      */
     public void goToPose(Pose targetPose) {
+        // FIX #6: Clear async state if joystick input detected (user interrupting)
+        if (hasJoystickInput() && (pendingPathfinding != null || cachedRoute != null)) {
+            pendingPathfinding = null;
+            cachedRoute = null;
+            follower.manual();
+            opMode.telemetry.addData("Info", "Navigation cancelled by driver");
+            opMode.telemetry.update();
+            return;
+        }
+        
         // Normalize target heading to fix angle wrap-around
         Pose normalizedTarget = new Pose(
             targetPose.x(), 

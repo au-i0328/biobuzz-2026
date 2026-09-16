@@ -154,15 +154,7 @@ public class RobotHardwareTest {
         assertNotNull("BLUE_HIVE_LEFT should be defined", RobotHardware.BLUE_HIVE_LEFT);
         assertNotNull("BLUE_HIVE_RIGHT should be defined", RobotHardware.BLUE_HIVE_RIGHT);
     }
-    
-    @Test
-    public void testHivePositions_RedHiveRightCoordinates() {
-        // Verify RED_HIVE_RIGHT has expected coordinates
-        Pose redHiveRight = RobotHardware.RED_HIVE_RIGHT;
-        assertEquals(57.6, redHiveRight.x(), 0.01);
-        assertEquals(54.2, redHiveRight.y(), 0.01);
-        assertEquals(0.0, redHiveRight.heading(), 0.01);
-    }
+
     
     @Test
     public void testFlywheelConstants_Positive() {

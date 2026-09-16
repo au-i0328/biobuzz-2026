@@ -22,10 +22,10 @@ import org.firstinspires.ftc.teamcode.pedro.Constants;
 public class RobotHardware {
 
     // Hive positions
-    public static final Pose RED_START = new Pose (0, 0, 0);
-    public static final Pose BLUE_START = new Pose (0, 0, 0);
-    public static final Pose RED_HIVE_LEFT = new Pose(0, 0, 0);
-    public static final Pose RED_HIVE_RIGHT = new Pose(57.6, 54.2, 0);
+    public static final Pose RED_START = new Pose (58, 0, -90);
+    public static final Pose BLUE_START = new Pose (0, 0, 90);
+    public static final Pose RED_HIVE_LEFT = new Pose(58, 87);
+    public static final Pose RED_HIVE_RIGHT = new Pose(58, 53);
     public static final Pose BLUE_HIVE_LEFT = new Pose(0, 0, 0);
     public static final Pose BLUE_HIVE_RIGHT = new Pose(0, 0, 0);
     public static final Pose RED_HIVE_LEFT_SHOOT = new Pose(0, 0, 0);
