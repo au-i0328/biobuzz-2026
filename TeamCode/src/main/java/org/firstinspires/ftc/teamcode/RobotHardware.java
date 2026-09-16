@@ -28,6 +28,11 @@ public class RobotHardware {
     public static final Pose RED_HIVE_RIGHT = new Pose(57.6, 54.2, 0);
     public static final Pose BLUE_HIVE_LEFT = new Pose(0, 0, 0);
     public static final Pose BLUE_HIVE_RIGHT = new Pose(0, 0, 0);
+    public static final Pose RED_HIVE_LEFT_SHOOT = new Pose(0, 0, 0);
+    public static final Pose RED_HIVE_RIGHT_SHOOT = new Pose(57.6, 54.2, 0);
+    public static final Pose BLUE_HIVE_LEFT_SHOOT = new Pose(0, 0, 0);
+    public static final Pose BLUE_HIVE_RIGHT_SHOOT = new Pose(0, 0, 0);
+
 
     // Flywheel PIDF coefficients
     public static double FLYWHEEL_KP = 0.05;

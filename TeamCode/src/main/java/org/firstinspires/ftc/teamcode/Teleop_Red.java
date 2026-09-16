@@ -94,6 +94,8 @@ public class Teleop_Red extends OpMode {
         for (LynxModule hub : allHubs) {
             hub.setBulkCachingMode(LynxModule.BulkCachingMode.MANUAL);
         }
+
+        robot.follower.manual();
         
         PanelsTelemetry.INSTANCE.getTelemetry().debug("Status: Initialized");
         PanelsTelemetry.INSTANCE.getTelemetry().update();
@@ -141,7 +143,7 @@ public class Teleop_Red extends OpMode {
         // --- TOUCHPAD: Reset Pose (0, 0, 0) AND IMU ---
         if (currentTouchpad && !lastTouchpad) {
             // Reset the follower pose directly
-            robot.follower.setPose(new Pose(0, 0, 0));
+            robot.follower.setPose(new Pose(72, 72, 0));
         }
 
         // --- SHARE: Reset IMU ONLY (Keep current X and Y position) ---
@@ -345,6 +347,7 @@ public class Teleop_Red extends OpMode {
         // Intake state
         PanelsTelemetry.INSTANCE.getTelemetry().debug("Intake State: " + intakeState);
         PanelsTelemetry.INSTANCE.getTelemetry().debug("Is Aligning: " + isAligning);
+        PanelsTelemetry.INSTANCE.getTelemetry().debug("Follower State: " + robot.follower.mode());
         
         PanelsTelemetry.INSTANCE.getTelemetry().update();
     }
