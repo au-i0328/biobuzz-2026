@@ -6,14 +6,25 @@ import com.pedropathing.math.Pose;
 import com.pedropathing.paths.Path;
 import com.qualcomm.robotcore.eventloop.opmode.OpMode;
 import com.qualcomm.robotcore.hardware.Gamepad;
-import com.pedropathing.follower.ManualDrive;
 import static com.pedropathing.api.Paths.line;
 import static com.pedropathing.api.Paths.curve;
+
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Comparator;
+import java.util.List;
+import java.util.PriorityQueue;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
 
 public class RunToPose {
     private Follower follower;
     private OpMode opMode;
     private static final double JOYSTICK_DEADZONE = 0.1;
+    
+    // Async pathfinding state
+    private CompletableFuture<List<Pose>> pendingPathfinding = null;
+    private List<Pose> cachedRoute = null;
     
     // Hard stop zones - structure obstacles with safety margin
     private static final double SAFETY_MARGIN = 10.0; // inches buffer around obstacles
@@ -170,64 +181,115 @@ public class RunToPose {
                                  BLUE_STRUCTURE_MIN_Y, BLUE_STRUCTURE_MAX_Y);
     }
     
+    // How far outside a rectangle's corner to place a visibility-graph node.
+    // Keeps nodes from sitting exactly on the boundary (which would count as "inside").
+    private static final double CORNER_CLEARANCE = 1.0;
+
     /**
-     * Calculates a waypoint to route around obstacles
-     * Returns the best waypoint that avoids forbidden zones
+     * Returns the 4 corners of a rectangle, each nudged outward (away from the
+     * rectangle) by CORNER_CLEARANCE so the corner itself is not inside the zone.
      */
-    private Pose calculateWaypoint(Pose current, Pose target) {
-        // Determine which side of obstacles to route around
-        double currentX = current.x();
-        double currentY = current.y();
-        double targetX = target.x();
-        double targetY = target.y();
-        
-        // Check which structure we're likely interfering with
-        boolean redInWay = lineIntersectsRect(currentX, currentY, targetX, targetY,
-                                              RED_STRUCTURE_MIN_X, RED_STRUCTURE_MAX_X,
-                                              RED_STRUCTURE_MIN_Y, RED_STRUCTURE_MIN_Y);
-        boolean blueInWay = lineIntersectsRect(currentX, currentY, targetX, targetY,
-                                               BLUE_STRUCTURE_MIN_X, BLUE_STRUCTURE_MAX_X,
-                                               BLUE_STRUCTURE_MIN_Y, BLUE_STRUCTURE_MAX_Y);
-        
-        // Calculate potential waypoints around structures
-        // Route below red structure (Y < 48)
-        Pose waypointBelowRed = new Pose(47.5, 45, current.heading());
-        // Route above red structure (Y > 93)  
-        Pose waypointAboveRed = new Pose(47.5, 96, current.heading());
-        // Route below blue structure (Y < 48)
-        Pose waypointBelowBlue = new Pose(94.5, 45, current.heading());
-        // Route above blue structure (Y > 93)
-        Pose waypointAboveBlue = new Pose(94.5, 96, current.heading());
-        // Route between structures (X between 50-92, any Y)
-        Pose waypointMiddle = new Pose(71, currentY, current.heading());
-        
-        // Find the shortest valid path
-        Pose bestWaypoint = null;
-        double shortestDistance = Double.MAX_VALUE;
-        
-        Pose[] candidates = {waypointBelowRed, waypointAboveRed, waypointBelowBlue, 
-                            waypointAboveBlue, waypointMiddle};
-        
-        for (Pose waypoint : candidates) {
-            // Check if this waypoint creates a valid path
-            boolean firstLegClear = !pathCrossesForbiddenZone(current, waypoint);
-            boolean secondLegClear = !pathCrossesForbiddenZone(waypoint, target);
-            boolean waypointSafe = !isInForbiddenZone(waypoint.x(), waypoint.y());
+    private Pose[] getRectCorners(double minX, double maxX, double minY, double maxY) {
+        return new Pose[] {
+            new Pose(minX - CORNER_CLEARANCE, minY - CORNER_CLEARANCE, 0),
+            new Pose(minX - CORNER_CLEARANCE, maxY + CORNER_CLEARANCE, 0),
+            new Pose(maxX + CORNER_CLEARANCE, minY - CORNER_CLEARANCE, 0),
+            new Pose(maxX + CORNER_CLEARANCE, maxY + CORNER_CLEARANCE, 0)
+        };
+    }
+
+    /**
+     * Finds the shortest sequence of straight-line hops from start to target that
+     * never cuts through either forbidden zone, using a visibility graph over the
+     * rectangle corners plus Dijkstra's algorithm with priority queue (O(n log n)).
+     * Returns the full waypoint list including start (index 0) and target (last index),
+     * or null if no path exists.
+     */
+    private List<Pose> findShortestPath(Pose start, Pose target) {
+        List<Pose> nodes = new ArrayList<>();
+        nodes.add(start);
+        nodes.add(target);
+        for (Pose corner : getRectCorners(RED_STRUCTURE_MIN_X, RED_STRUCTURE_MAX_X,
+                                          RED_STRUCTURE_MIN_Y, RED_STRUCTURE_MAX_Y)) {
+            nodes.add(corner);
+        }
+        for (Pose corner : getRectCorners(BLUE_STRUCTURE_MIN_X, BLUE_STRUCTURE_MAX_X,
+                                          BLUE_STRUCTURE_MIN_Y, BLUE_STRUCTURE_MAX_Y)) {
+            nodes.add(corner);
+        }
+
+        int n = nodes.size();
+        double[] dist = new double[n];
+        int[] prev = new int[n];
+        boolean[] visited = new boolean[n];
+        Arrays.fill(dist, Double.MAX_VALUE);
+        Arrays.fill(prev, -1);
+        dist[0] = 0;
+
+        // Use priority queue for O(n log n) instead of O(n²)
+        PriorityQueue<Integer> pq = new PriorityQueue<>(Comparator.comparingDouble(i -> dist[i]));
+        pq.offer(0);
+
+        while (!pq.isEmpty()) {
+            int u = pq.poll();
             
-            if (firstLegClear && secondLegClear && waypointSafe) {
-                // Calculate total distance through this waypoint
-                double distToWaypoint = Math.hypot(waypoint.x() - currentX, waypoint.y() - currentY);
-                double distToTarget = Math.hypot(targetX - waypoint.x(), targetY - waypoint.y());
-                double totalDist = distToWaypoint + distToTarget;
-                
-                if (totalDist < shortestDistance) {
-                    shortestDistance = totalDist;
-                    bestWaypoint = waypoint;
+            if (visited[u]) continue;
+            visited[u] = true;
+            
+            if (u == 1) break; // Found target
+
+            for (int v = 0; v < n; v++) {
+                if (visited[v] || u == v) continue;
+                if (pathCrossesForbiddenZone(nodes.get(u), nodes.get(v))) continue;
+                double edgeDist = Math.hypot(nodes.get(v).x() - nodes.get(u).x(),
+                                             nodes.get(v).y() - nodes.get(u).y());
+                if (dist[u] + edgeDist < dist[v]) {
+                    dist[v] = dist[u] + edgeDist;
+                    prev[v] = u;
+                    pq.offer(v);
                 }
             }
         }
+
+        if (dist[1] == Double.MAX_VALUE) {
+            return null; // no valid route found
+        }
+
+        // Walk back from target (index 1) to start (index 0)
+        List<Pose> path = new ArrayList<>();
+        int cur = 1;
+        while (cur != -1) {
+            path.add(0, nodes.get(cur));
+            cur = prev[cur];
+        }
+        return path;
+    }
+    
+    /**
+     * Starts async pathfinding computation in background thread.
+     * Non-blocking - returns immediately.
+     */
+    private void startAsyncPathfinding(Pose start, Pose target) {
+        pendingPathfinding = CompletableFuture.supplyAsync(() -> findShortestPath(start, target));
+    }
+    
+    /**
+     * Checks if async pathfinding is complete and retrieves result.
+     * Returns null if not yet complete or if pathfinding failed.
+     */
+    private List<Pose> getAsyncPathfindingResult() {
+        if (pendingPathfinding == null) return null;
+        if (!pendingPathfinding.isDone()) return null;
         
-        return bestWaypoint;
+        try {
+            List<Pose> result = pendingPathfinding.get();
+            pendingPathfinding = null;
+            return result;
+        } catch (InterruptedException | ExecutionException e) {
+            opMode.telemetry.addData("Pathfinding Error", e.getMessage());
+            pendingPathfinding = null;
+            return null;
+        }
     }
     
     /**
@@ -258,70 +320,74 @@ public class RunToPose {
         
         // Check if direct path would cross a forbidden zone - if so, reroute
         if (pathCrossesForbiddenZone(currentPose, normalizedTarget)) {
-            // Calculate waypoint to route around obstacles
-            Pose waypoint = calculateWaypoint(currentPose, normalizedTarget);
-            
-            if (waypoint == null) {
-                opMode.telemetry.addData("ERROR", "Cannot find valid path around obstacles!");
-                opMode.telemetry.addData("Current", String.format("(%.1f, %.1f)", 
-                    currentPose.x(), currentPose.y()));
-                opMode.telemetry.addData("Target", String.format("(%.1f, %.1f)", 
-                    normalizedTarget.x(), normalizedTarget.y()));
+            // Start async pathfinding if not already running
+            if (pendingPathfinding == null && cachedRoute == null) {
+                startAsyncPathfinding(currentPose, normalizedTarget);
+                opMode.telemetry.addData("Info", "Computing path around obstacles...");
                 opMode.telemetry.update();
-                return;
+                follower.manual();
+                return; // Exit and wait for next call
             }
             
-            // Build smooth curved path with waypoint using Bezier interpolation
-            opMode.telemetry.addData("Info", "Routing around obstacles with smooth curve");
-            opMode.telemetry.addData("Waypoint", String.format("(%.1f, %.1f)", 
-                waypoint.x(), waypoint.y()));
-            opMode.telemetry.update();
-            
-            // Calculate control point for smooth curve
-            double midX = (currentPose.x() + waypoint.x()) / 2.0;
-            double midY = (currentPose.y() + waypoint.y()) / 2.0;
-            Pose controlPoint1 = new Pose(midX, midY, currentPose.heading());
-            
-            // Calculate shortest angular path for first segment
-            double waypointAngleOptimized = calculateShortestAngle(currentPose.heading(), waypoint.heading());
-            
-            // First segment: current -> waypoint with smooth curve
-            Path path1 = curve(currentPose, controlPoint1, waypoint)
-                .linear(currentPose.heading(), waypointAngleOptimized);
-            follower.follow(path1);
-            
-            while (follower.isBusy() && shouldContinue()) {
-                follower.update();
-                
-                Pose currentPos = follower.pose();
-                if (isInForbiddenZone(currentPos.x(), currentPos.y())) {
-                    follower.manual();
-                    opMode.telemetry.addData("EMERGENCY STOP", "Robot entered forbidden zone!");
-                    opMode.telemetry.addData("Position", String.format("(%.1f, %.1f)", 
-                        currentPos.x(), currentPos.y()));
+            // Check if pathfinding completed
+            if (cachedRoute == null) {
+                cachedRoute = getAsyncPathfindingResult();
+                if (cachedRoute == null) {
+                    // Still computing
+                    opMode.telemetry.addData("Info", "Computing path around obstacles...");
                     opMode.telemetry.update();
+                    follower.manual();
                     return;
                 }
-                
-                opMode.telemetry.addData("Status", "Driving to waypoint (curved path)");
-                opMode.telemetry.addData("Waypoint", String.format("(%.1f, %.1f)", 
-                    waypoint.x(), waypoint.y()));
-                opMode.telemetry.update();
             }
             
-            // Calculate control point for second smooth curve
-            Pose currentAfterWaypoint = follower.pose();
-            double midX2 = (currentAfterWaypoint.x() + normalizedTarget.x()) / 2.0;
-            double midY2 = (currentAfterWaypoint.y() + normalizedTarget.y()) / 2.0;
-            Pose controlPoint2 = new Pose(midX2, midY2, currentAfterWaypoint.heading());
+            // Validate computed route
+            if (cachedRoute.size() < 2) {
+                opMode.telemetry.addData("ERROR", "Cannot find valid path around obstacles!");
+                opMode.telemetry.addData("Current", String.format("(%.1f, %.1f)",
+                    currentPose.x(), currentPose.y()));
+                opMode.telemetry.addData("Target", String.format("(%.1f, %.1f)",
+                    normalizedTarget.x(), normalizedTarget.y()));
+                opMode.telemetry.update();
+                cachedRoute = null;
+                follower.manual();
+                return;
+            }
+
+            opMode.telemetry.addData("Info", "Following computed path around obstacles");
+            opMode.telemetry.update();
+
+            // Follow each leg of the shortest route in turn
+            for (int i = 1; i < cachedRoute.size(); i++) {
+                Pose legStart = follower.pose();
+                Pose legEnd = cachedRoute.get(i);
+                boolean isFinalLeg = (i == cachedRoute.size() - 1);
+                Pose legEndWithHeading = isFinalLeg
+                    ? normalizedTarget
+                    : new Pose(legEnd.x(), legEnd.y(), legStart.heading());
+
+                double midX = (legStart.x() + legEndWithHeading.x()) / 2.0;
+                double midY = (legStart.y() + legEndWithHeading.y()) / 2.0;
+                Pose controlPoint = new Pose(midX, midY, legStart.heading());
+
+                double angleOptimized = calculateShortestAngle(legStart.heading(), legEndWithHeading.heading());
+
+                Path leg = curve(legStart, controlPoint, legEndWithHeading)
+                    .linear(legStart.heading(), angleOptimized);
+                follower.follow(leg);
+
+                while (follower.isBusy() && shouldContinue()) {
+                    follower.update();
+
+                    opMode.telemetry.addData("Status", "Driving around obstacles (leg " + i + "/" + (cachedRoute.size() - 1) + ")");
+                    opMode.telemetry.addData("Next waypoint", String.format("(%.1f, %.1f)",
+                        legEndWithHeading.x(), legEndWithHeading.y()));
+                    opMode.telemetry.update();
+                }
+            }
             
-            // Calculate shortest angular path for second segment
-            double targetAngleOptimized = calculateShortestAngle(currentAfterWaypoint.heading(), normalizedTarget.heading());
-            
-            // Second segment: waypoint -> target with smooth curve
-            Path path2 = curve(currentAfterWaypoint, controlPoint2, normalizedTarget)
-                .linear(currentAfterWaypoint.heading(), targetAngleOptimized);
-            follower.follow(path2);
+            // Clear cached route after use
+            cachedRoute = null;
         } else {
             // Direct path is clear - use smooth curve for natural motion
             double midX = (currentPose.x() + normalizedTarget.x()) / 2.0;
@@ -340,22 +406,11 @@ public class RunToPose {
         while (follower.isBusy() && shouldContinue()) {
             follower.update();
             
-            // Hard stop if robot enters a forbidden zone
-            Pose currentPos = follower.pose();
-            if (isInForbiddenZone(currentPos.x(), currentPos.y())) {
-                follower.manual();
-                opMode.telemetry.addData("EMERGENCY STOP", "Robot entered forbidden zone!");
-                opMode.telemetry.addData("Position", String.format("(%.1f, %.1f)", 
-                    currentPos.x(), currentPos.y()));
-                opMode.telemetry.update();
-                return;
-            }
-            
             opMode.telemetry.addData("Status", "Driving to pose");
             opMode.telemetry.addData("Target", String.format("(%.1f, %.1f, %.1f°)", 
                 normalizedTarget.x(), normalizedTarget.y(), Math.toDegrees(normalizedTarget.heading())));
             opMode.telemetry.addData("Current", String.format("(%.1f, %.1f, %.1f°)", 
-                currentPos.x(), currentPos.y(), Math.toDegrees(currentPos.heading())));
+                follower.pose().x(), follower.pose().y(), Math.toDegrees(follower.pose().heading())));
             opMode.telemetry.update();
         }
         

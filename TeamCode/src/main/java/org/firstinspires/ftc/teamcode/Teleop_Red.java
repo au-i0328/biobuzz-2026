@@ -65,6 +65,7 @@ public class Teleop_Red extends OpMode {
     // Button edge detection
     private boolean previousRightBumper = false;
     private boolean previousLeftBumper = false;
+    private boolean previousLeftTrigger = false;
     private boolean previousRightTrigger = false;
     private boolean lastTouchpad = false;
     private boolean lastShare = false;
@@ -192,51 +193,53 @@ public class Teleop_Red extends OpMode {
     }
     
     private void handleScoringControl(Pose currentPose) {
-        boolean leftTriggerPressed = gamepad1.left_trigger > 0.2;
+        boolean currentLeftTrigger = gamepad1.left_trigger > 0.2;
         boolean currentRightTrigger = gamepad1.right_trigger > 0.2;
         
-        // Left trigger: align to hive using follower.hold() and spin up flywheel
-        if (leftTriggerPressed) {
-            if (!isAligning) {
-                // Just started aligning - find closer hive
-                double distLeft = currentPose.toVector2D().distance(RobotHardware.RED_HIVE_LEFT.toVector2D());
-                double distRight = currentPose.toVector2D().distance(RobotHardware.RED_HIVE_RIGHT.toVector2D());
-                targetHive = distLeft < distRight ? RobotHardware.RED_HIVE_LEFT : RobotHardware.RED_HIVE_RIGHT;
-                
-                isAligning = true;
-                hasRumbled = false;
-                headingController.reset();
-            }
+        // Left trigger: align to hive using follower.hold() and spin up flywheel (edge detection)
+        if (currentLeftTrigger && !previousLeftTrigger) {
+            // Just pressed - start aligning and find closer hive
+            double distLeft = currentPose.toVector2D().distance(RobotHardware.RED_HIVE_LEFT.toVector2D());
+            double distRight = currentPose.toVector2D().distance(RobotHardware.RED_HIVE_RIGHT.toVector2D());
+            targetHive = distLeft < distRight ? RobotHardware.RED_HIVE_LEFT : RobotHardware.RED_HIVE_RIGHT;
             
-            // Calculate target heading to face hive
-            Vector2D toHive = targetHive.toVector2D().minus(currentPose.toVector2D());
-            double targetHeading = toHive.theta();
-            
-            // Check if aligned
-            double headingError = com.pedropathing.utils.Angle.normalizeSigned(targetHeading - currentPose.heading());
-            boolean aligned = Math.abs(Math.toDegrees(headingError)) < RobotHardware.ALIGNMENT_TOLERANCE;
-            
-            // Rumble when first aligned
-            if (aligned && !hasRumbled) {
-                gamepad1.rumble(200);
-                gamepad2.rumble(200);
-                hasRumbled = true;
-                robot.flywheelOn();
-            }
-            
-            // Keep flywheel spinning while aligned
-            if (aligned) {
-                robot.flywheelOn();
-            }
-            
-        } else {
-            // Released left trigger - stop aligning
-            if (isAligning) {
-                isAligning = false;
-                targetHive = null;
-                hasRumbled = false;
-            }
+            isAligning = true;
+            hasRumbled = false;
+            headingController.reset();
         }
+        
+        // While left trigger held: maintain alignment
+        if (currentLeftTrigger) {
+            if (targetHive != null) {
+                // Calculate target heading to face hive
+                Vector2D toHive = targetHive.toVector2D().minus(currentPose.toVector2D());
+                double targetHeading = toHive.theta();
+                
+                // Check if aligned
+                double headingError = com.pedropathing.utils.Angle.normalizeSigned(targetHeading - currentPose.heading());
+                boolean aligned = Math.abs(Math.toDegrees(headingError)) < RobotHardware.ALIGNMENT_TOLERANCE;
+                
+                // Rumble when first aligned
+                if (aligned && !hasRumbled) {
+                    gamepad1.rumble(200);
+                    gamepad2.rumble(200);
+                    hasRumbled = true;
+                    robot.flywheelOn();
+                }
+                
+                // Keep flywheel spinning while aligned
+                if (aligned) {
+                    robot.flywheelOn();
+                }
+            }
+        } else if (!currentLeftTrigger && previousLeftTrigger) {
+            // Just released left trigger - stop aligning
+            isAligning = false;
+            targetHive = null;
+            hasRumbled = false;
+        }
+        
+        previousLeftTrigger = currentLeftTrigger;
         
         // Right trigger: fire if aligned and flywheel ready
         if (currentRightTrigger && !previousRightTrigger) {

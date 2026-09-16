@@ -130,7 +130,8 @@ public class RobotHardware {
     // Voltage compensation helper
     private double voltageToPower(double targetVolts) {
         double currentVoltage = voltageSensor.getVoltage();
-        return targetVolts / currentVoltage;
+        // Clamp to valid motor power range and handle zero/low voltage safely
+        return Math.min(1.0, targetVolts / Math.max(currentVoltage, 1.0));
     }
     
     // Intake control commands
