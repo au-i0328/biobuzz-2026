@@ -78,7 +78,7 @@ public class RobotHardware {
         
         // Initialize Pedro Pathing follower (handles drivetrain + localizer)
         follower = Constants.create(hardwareMap);
-        
+
         // Initialize drivetrain motors
         frontLeft = hardwareMap.get(DcMotorEx.class, "frontLeft");
         frontRight = hardwareMap.get(DcMotorEx.class, "frontRight");
@@ -102,11 +102,11 @@ public class RobotHardware {
         backRight.setMode(DcMotor.RunMode.RUN_WITHOUT_ENCODER);
         
         // Initialize intake and transfer motors
-        intakeMotor = hardwareMap.get(DcMotor.class, "intakeMotor");
-        transferMotor = hardwareMap.get(DcMotor.class, "transferMotor");
-        
-        intakeMotor.setDirection(DcMotorSimple.Direction.FORWARD);
-        transferMotor.setDirection(DcMotorSimple.Direction.FORWARD);
+//        intakeMotor = hardwareMap.get(DcMotor.class, "intakeMotor");
+//        transferMotor = hardwareMap.get(DcMotor.class, "transferMotor");
+
+//        intakeMotor.setDirection(DcMotorSimple.Direction.FORWARD);
+//        transferMotor.setDirection(DcMotorSimple.Direction.FORWARD);
 
         //intakeLeft = new CRServo(hardwareMap, "intakeLeft");
         //intakeRight = new CRServo(hardwareMap, "intakeRight");
@@ -114,17 +114,17 @@ public class RobotHardware {
         //intakeRight.setInverted(true);
 
         // Initialize flywheel motors (Solvers Ex) with velocity control
-        flywheelL = new MotorEx(hardwareMap, "flywheelL");
-        flywheelR = new MotorEx(hardwareMap, "flywheelR");
+//        flywheelL = new MotorEx(hardwareMap, "flywheelL");
+//        flywheelR = new MotorEx(hardwareMap, "flywheelR");
 
         // Configure flywheel PIDF for velocity control
-        flywheelL.setRunMode(MotorEx.RunMode.VelocityControl);
-        flywheelL.setVeloCoefficients(FLYWHEEL_KP, FLYWHEEL_KI, FLYWHEEL_KD);
-        flywheelL.setFeedforwardCoefficients(FLYWHEEL_KS, FLYWHEEL_KV, FLYWHEEL_KA);
-        
-        flywheelR.setRunMode(MotorEx.RunMode.VelocityControl);
-        flywheelR.setVeloCoefficients(FLYWHEEL_KP, FLYWHEEL_KI, FLYWHEEL_KD);
-        flywheelR.setFeedforwardCoefficients(FLYWHEEL_KS, FLYWHEEL_KV, FLYWHEEL_KA);
+//        flywheelL.setRunMode(MotorEx.RunMode.VelocityControl);
+//        flywheelL.setVeloCoefficients(FLYWHEEL_KP, FLYWHEEL_KI, FLYWHEEL_KD);
+//        flywheelL.setFeedforwardCoefficients(FLYWHEEL_KS, FLYWHEEL_KV, FLYWHEEL_KA);
+
+//        flywheelR.setRunMode(MotorEx.RunMode.VelocityControl);
+//        flywheelR.setVeloCoefficients(FLYWHEEL_KP, FLYWHEEL_KI, FLYWHEEL_KD);
+//        flywheelR.setFeedforwardCoefficients(FLYWHEEL_KS, FLYWHEEL_KV, FLYWHEEL_KA);
     }
     
     // Voltage compensation helper

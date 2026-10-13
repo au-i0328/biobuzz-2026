@@ -297,7 +297,7 @@ public class TeleopControlTest {
         double dist = distance(p1, p2);
         assertEquals(5.0, dist, 0.001);  // 3-4-5 triangle
     }
-    
+
     // ===== INTAKE STATE TRANSITION TESTS =====
     
     @Test

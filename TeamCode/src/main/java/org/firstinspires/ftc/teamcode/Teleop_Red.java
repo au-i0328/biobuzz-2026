@@ -1,11 +1,19 @@
 package org.firstinspires.ftc.teamcode;
 
+//import static org.firstinspires.ftc.teamcode.pedro.Constants.drivetrainConfig;
+//import static org.firstinspires.ftc.teamcode.pedro.Constants.foresightConfig;
+//import static org.firstinspires.ftc.teamcode.pedro.Constants.localizerConfig;
+
 import com.bylazar.configurables.annotations.Configurable;
 import com.bylazar.telemetry.PanelsTelemetry;
+import com.pedropathing.algorithm.Foresight;
+import com.pedropathing.follower.Follower;
 import com.pedropathing.math.Pose;
 import com.pedropathing.math.Vector2D;
 import com.pedropathing.drivetrain.DrivePowers;
 import com.pedropathing.follower.ManualDrive;
+import com.pedropathing.revhub.drivetrains.Mecanum;
+import com.pedropathing.revhub.localizers.PinpointLocalizer;
 import com.qualcomm.hardware.lynx.LynxModule;
 import com.qualcomm.robotcore.eventloop.opmode.OpMode;
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
@@ -83,7 +91,6 @@ public class Teleop_Red extends OpMode {
         // Initialize robot hardware
         robot = new RobotHardware();
         robot.init(hardwareMap);
-        
         // Initialize RunToPose
         runToPose = new RunToPose(robot.follower, this);
         
